@@ -39,6 +39,27 @@ header {
 .brand { display: flex; align-items: center; gap: 8px; }
 .brand h1 { margin: 0; font-size: 20px; color: var(--pink-dark); }
 .brand .sub { color: var(--muted); font-size: 12px; }
+.brand-link {
+  color: var(--pink-dark);
+  font-weight: 600;
+  text-decoration: none;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, var(--pink-light), #fff);
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+.brand-link:hover {
+  background: linear-gradient(135deg, var(--pink), var(--pink-dark));
+  color: white;
+  border-color: var(--pink-dark);
+  box-shadow: 0 2px 8px rgba(211, 77, 128, 0.3);
+}
+.brand-link::after {
+  content: " ↗";
+  font-size: 9px;
+  opacity: 0.6;
+}
 .bell { font-size: 22px; animation: ring 2s ease-in-out infinite; }
 
 @keyframes ring {
