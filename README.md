@@ -179,9 +179,4 @@ python register_outlook.py 'email----password----client_id----refresh_token'
 - **TLS 指纹**：默认 `chrome136`；TLS 握手失败时会自动尝试 `chrome124` / `chrome120` 兜底。
 - **Cloudflare 403**：`get_csrf_token` 内置 3 次重试 + 指数 backoff。
 
-## 仓库出处
 
-原始项目：<https://github.com/DanOps-1/Gpt-Agreement-Payment>  
-License: MIT
-
-Sentinel 求解器源自：<https://github.com/zc-zhangchen/any-auto-register>（MIT）
