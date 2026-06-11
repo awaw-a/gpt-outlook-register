@@ -497,6 +497,24 @@ button.quick-copy.copied { background: #e2f0fb; color: var(--done); border-color
   color: var(--muted);
   font-size: 11px;
 }
+.auto-meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+.auto-worker {
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: var(--pink-light);
+  border-left: 3px solid var(--pink);
+  font-size: 11px;
+  border-radius: 3px;
+}
+.auto-worker code {
+  background: white;
+  padding: 0 4px;
+  border-radius: 3px;
+  color: var(--pink-dark);
+}
 
 /* 命中试用资格时的"立即支付"框 */
 .pay-box {

@@ -206,6 +206,7 @@ async function refreshPool() {
   tb.innerHTML = "";
   for (const r of items) {
     const tr = document.createElement("tr");
+    const canReset = (r.status === "done" || r.status === "failed");
     tr.innerHTML = `
       <td><input type="checkbox" class="pool-check" data-email="${r.email}"></td>
       <td>${r.email}</td>
@@ -213,6 +214,7 @@ async function refreshPool() {
       <td title="${r.fail_reason || ''}">${(r.fail_reason || '').slice(0, 50)}</td>
       <td>
         <button data-act="use" data-email="${r.email}">使用</button>
+        ${canReset ? `<button data-act="reset" data-email="${r.email}" title="改回 available 重新注册">🔄 重置</button>` : ""}
         <button data-act="del" data-email="${r.email}">删除</button>
       </td>
     `;
@@ -262,7 +264,9 @@ function _selectedEmails() {
 function _updateSelCount() {
   const n = _selectedEmails().length;
   $("#selCount").textContent = n;
+  $("#selCount2").textContent = n;
   $("#btnDeleteSelected").disabled = n === 0;
+  $("#btnResetSelected").disabled = n === 0;
 }
 $("#poolTable").addEventListener("change", (e) => {
   if (e.target.classList.contains("pool-check")) _updateSelCount();
@@ -270,6 +274,26 @@ $("#poolTable").addEventListener("change", (e) => {
 $("#poolSelectAll").addEventListener("change", (e) => {
   document.querySelectorAll(".pool-check").forEach(c => c.checked = e.target.checked);
   _updateSelCount();
+});
+
+$("#btnResetSelected").addEventListener("click", async () => {
+  const emails = _selectedEmails();
+  if (!emails.length) return;
+  if (!confirm(`重置选中的 ${emails.length} 个号为 available？\n（号会重新可用，已保存的凭证不变）`)) return;
+  $("#poolActionResult").textContent = "重置中...";
+  $("#poolActionResult").className = "result";
+  try {
+    const r = await api("/api/accounts/bulk_reset", {
+      method: "POST",
+      body: JSON.stringify({ emails }),
+    });
+    $("#poolActionResult").textContent = `✅ 已重置 ${r.reset} 个号`;
+    $("#poolActionResult").className = "result ok";
+    refreshPool(); refreshStats();
+  } catch (e) {
+    $("#poolActionResult").textContent = "❌ " + e.message;
+    $("#poolActionResult").className = "result bad";
+  }
 });
 
 $("#btnDeleteSelected").addEventListener("click", async () => {
@@ -327,6 +351,15 @@ $("#poolTable").addEventListener("click", async (e) => {
   if (btn.dataset.act === "use") {
     $("#regEmail").value = email;
     window.scrollTo({ top: 0, behavior: "smooth" });
+  } else if (btn.dataset.act === "reset") {
+    if (!confirm(`重置 ${email} 为 available？\n（号会重新可用，但已保存的凭证不变）`)) return;
+    try {
+      await api(`/api/accounts/reset/${encodeURIComponent(email)}`, { method: "POST" });
+      refreshPool();
+      refreshStats();
+    } catch (err) {
+      alert("重置失败: " + err.message);
+    }
   } else if (btn.dataset.act === "del") {
     if (!confirm(`删除 ${email}？`)) return;
     await api(`/api/accounts/${encodeURIComponent(email)}`, { method: "DELETE" });
@@ -704,6 +737,8 @@ const AUTO_BTNS = {
 function _autoOptions() {
   return {
     proxy: $("#regProxy").value.trim(),
+    proxy_pool: $("#autoProxyPool").value,
+    concurrency: parseInt($("#autoConcurrency").value || "1", 10),
     otp_timeout: parseInt($("#regOtpTimeout").value || "180", 10),
     want_access_token: true,
     want_session_token: true,
@@ -733,11 +768,21 @@ function _renderAutoStatus(s) {
     "paused":  "⏸ 已暂停",
   }[s.state] || s.state;
   const elapsed = s.elapsed ? Math.round(s.elapsed) + "s" : "—";
+  const workers = Array.isArray(s.workers) ? s.workers : [];
+  const workerRows = workers.length
+    ? workers.map(w => {
+        const dur = w.started_at ? Math.round(Date.now() / 1000 - w.started_at) + "s" : "";
+        const px = w.proxy ? ` [${escapeHtml(w.proxy.slice(0, 30))}${w.proxy.length > 30 ? "..." : ""}]` : "";
+        return `<div class="auto-worker">worker-${w.id} ▶ <code>${escapeHtml(w.email)}</code> ${dur}${px}</div>`;
+      }).join("")
+    : "";
+  const meta = `并发=${s.concurrency || 1}` + (s.proxy_pool_size ? ` 代理池=${s.proxy_pool_size}` : "");
   $("#autoStatus").innerHTML = `
     <b>${stateLabel}</b>
     &nbsp;|&nbsp; 已完成: <b class="ok">${s.registered_ok}</b> 成功 / <b class="bad">${s.registered_fail}</b> 失败
     &nbsp;|&nbsp; 运行: ${elapsed}
-    ${s.current_email ? `&nbsp;|&nbsp; 正在: <code>${escapeHtml(s.current_email)}</code>` : ""}
+    &nbsp;|&nbsp; <span class="auto-meta">${meta}</span>
+    ${workerRows ? "<br>" + workerRows : ""}
     <br><span class="auto-msg">${escapeHtml(s.last_message || "")}</span>
   `;
   // 按钮可用性
@@ -802,9 +847,11 @@ const FORM_KEY = "gpt_outlook_register_form_v1";
 
 // id -> 类型（默认 text；checkbox 走 .checked）
 const PERSIST_FIELDS = {
-  regProxy:      "text",
-  regOtpTimeout: "text",
-  autoCoolDown:  "text",
+  regProxy:        "text",
+  regOtpTimeout:   "text",
+  autoCoolDown:    "text",
+  autoConcurrency: "text",
+  autoProxyPool:   "text",
 };
 
 function _saveForm() {

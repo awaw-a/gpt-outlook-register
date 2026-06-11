@@ -117,6 +117,28 @@ def api_reset_failed():
     return {"ok": True, "reset": n, "stats": db.stats()}
 
 
+@app.post("/api/accounts/reset/{email}")
+def api_reset_account(email: str):
+    """重置单个号：done / failed → available。"""
+    ok = db.reset_to_available(email)
+    if not ok:
+        raise HTTPException(404, f"邮箱 {email} 不存在")
+    return {"ok": True, "email": email}
+
+
+class BulkResetReq(BaseModel):
+    emails: list[str]
+
+
+@app.post("/api/accounts/bulk_reset")
+def api_bulk_reset(req: BulkResetReq):
+    """批量重置：done / failed → available。"""
+    if not req.emails:
+        raise HTTPException(400, "emails 不能为空")
+    n = db.bulk_reset_to_available(req.emails)
+    return {"ok": True, "reset": n, "stats": db.stats()}
+
+
 @app.post("/api/accounts/release_stale")
 def api_release_stale(stale_seconds: int = 1800):
     n = db.release_stale_in_use(stale_seconds=stale_seconds)
@@ -324,10 +346,12 @@ class AutoLoopStartReq(BaseModel):
     want_access_token: bool = True
     want_session_token: bool = True
     want_refresh_token: bool = True
-    proxy: str = ""
+    proxy: str = ""              # 单代理（concurrency=1 + 无代理池时用）
+    proxy_pool: str = ""         # 多代理池（每行一个）；优先于 proxy
+    concurrency: int = 1         # 并发 worker 数（1-20）
     otp_timeout: int = 180
     allow_existing_login: bool = True
-    cool_down_seconds: float = 3.0  # 两轮注册之间的冷却（防风控）
+    cool_down_seconds: float = 3.0  # 每个 worker 跑完后冷却（防风控）
 
 
 @app.post("/api/auto/start")

@@ -240,6 +240,39 @@ def release_unused(email: str) -> None:
         con.commit()
 
 
+def reset_to_available(email: str) -> bool:
+    """手动重置单个号：done / failed → available，清空时间戳和失败原因。
+
+    场景：注册成功但 refresh_token 没拿到，主人想重新跑一遍这个号。
+    """
+    with _lock:
+        con = _conn()
+        rc = con.execute(
+            "UPDATE outlook_accounts SET status='available', claimed_at=NULL, "
+            "finished_at=NULL, fail_reason=NULL "
+            "WHERE lower(email)=lower(?)",
+            (email,),
+        )
+        con.commit()
+        return rc.rowcount > 0
+
+
+def bulk_reset_to_available(emails: list[str]) -> int:
+    """批量重置多个号。返回实际被改的行数。"""
+    if not emails:
+        return 0
+    with _lock:
+        con = _conn()
+        rc = con.execute(
+            f"UPDATE outlook_accounts SET status='available', claimed_at=NULL, "
+            f"finished_at=NULL, fail_reason=NULL "
+            f"WHERE lower(email) IN ({','.join(['lower(?)'] * len(emails))})",
+            emails,
+        )
+        con.commit()
+        return rc.rowcount
+
+
 def reset_failed_to_available() -> int:
     """把所有 failed 号一次性重置为 available（清掉 fail_reason）。返回受影响行数。
 

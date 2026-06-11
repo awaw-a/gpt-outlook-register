@@ -66,8 +66,17 @@
         <button id="btnAutoPause" disabled>⏸ 暂停</button>
         <button id="btnAutoResume" disabled>▶ 恢复</button>
         <button id="btnAutoStop" disabled>⏹ 停止</button>
-        <label class="check inline-check" title="两轮之间的冷却（防风控）">
+        <label class="check inline-check" title="同时跑几个注册流程">
+          并发:<input id="autoConcurrency" type="number" value="1" min="1" max="20" style="width:60px;display:inline-block;margin-left:4px">
+        </label>
+        <label class="check inline-check" title="每个 worker 跑完一个号的冷却（防风控）">
           冷却:<input id="autoCoolDown" type="number" value="3" min="0" max="120" style="width:60px;display:inline-block;margin-left:4px"> 秒
+        </label>
+      </div>
+      <div class="row">
+        <label class="check inline-check" style="width:100%" title="多代理池：每行一个，worker 按顺序轮流取；如果留空则所有 worker 都用上面的「代理」字段">
+          <span style="white-space:nowrap">代理池:</span>
+          <textarea id="autoProxyPool" rows="3" placeholder="留空 = 所有 worker 用同一个代理&#10;每行一个代理，并发 N 时 worker 0~N 依次用&#10;例：&#10;socks5://127.0.0.1:7890&#10;socks5://127.0.0.1:7891&#10;http://1.2.3.4:8080" style="flex:1;font-family:monospace;font-size:12px;margin-left:4px"></textarea>
         </label>
       </div>
       <div class="row">
@@ -102,6 +111,7 @@
         <span id="poolActionResult" class="result"></span>
       </div>
       <div class="row">
+        <button id="btnResetSelected" title="把已勾选的 done/failed 号重置为 available" disabled>🔄 重置选中 (<span id="selCount2">0</span>)</button>
         <button id="btnDeleteSelected" title="删除已勾选的号" disabled>🗑️ 删除选中 (<span id="selCount">0</span>)</button>
         <select id="bulkDelStatus" title="按状态批量删除">
           <option value="">— 按状态批量删 —</option>
