@@ -373,9 +373,19 @@ $("#poolTable").addEventListener("click", async (e) => {
 
 async function refreshRegistered() {
   const { items } = await api("/api/registered");
+  const filter = document.querySelector("input[name='regFilter']:checked")?.value || "all";
+
+  // 按筛选条件过滤
+  let filtered = items;
+  if (filter === "has_rt") {
+    filtered = items.filter(r => r.rt_len > 0);
+  } else if (filter === "no_rt") {
+    filtered = items.filter(r => r.rt_len === 0);
+  }
+
   const tb = $("#regTable tbody");
   tb.innerHTML = "";
-  for (const r of items) {
+  for (const r of filtered) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td><input type="checkbox" class="reg-check" data-email="${r.email}"></td>
@@ -396,6 +406,11 @@ async function refreshRegistered() {
   _updateSelCountReg();
 }
 $("#btnRefreshReg").addEventListener("click", refreshRegistered);
+
+// radio 切换时自动刷新
+document.querySelectorAll("input[name='regFilter']").forEach(r => {
+  r.addEventListener("change", refreshRegistered);
+});
 
 // ── 注册结果：复选框 + 批量删 + 单行删 ──
 

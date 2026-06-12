@@ -136,6 +136,15 @@
     <div class="tab-content hidden" id="tab-registered">
       <div class="row">
         <button id="btnRefreshReg">刷新</button>
+        <label class="check" style="margin-left:12px">
+          <input type="radio" name="regFilter" value="all" checked> 全部
+        </label>
+        <label class="check">
+          <input type="radio" name="regFilter" value="has_rt"> 有 RT
+        </label>
+        <label class="check">
+          <input type="radio" name="regFilter" value="no_rt"> 无 RT
+        </label>
         <button id="btnExportAll" title="把所有注册结果的完整凭证导出为 JSON 文件">📦 批量导出全部</button>
         <button id="btnDeleteSelectedReg" title="删除已勾选的凭证" disabled>🗑️ 删除选中 (<span id="selCountReg">0</span>)</button>
         <button id="btnDeleteAllReg" title="清空所有注册结果（危险）">💥 清空全部</button>
