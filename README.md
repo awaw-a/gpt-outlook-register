@@ -29,11 +29,37 @@
 ## 🎀 两种使用方式
 
 ### A. WebUI 模式（推荐，可视化）
+
+#### 全新安装
 ```bash
+git clone https://github.com/Regert888/gpt-outlook-register.git
+cd gpt-outlook-register
 pip install -r requirements.txt
 python start_webui.py
 # 浏览器自动打开 http://127.0.0.1:8765/
 ```
+
+#### 已有项目，安全升级（不丢数据）
+```bash
+cd gpt-outlook-register
+
+# 1. 🔴 备份数据库（重要！）
+cp webui/webui.db webui/webui.db.backup
+# Windows 用户也可以手动复制 webui\webui.db 到别的地方
+
+# 2. 拉取最新代码
+git pull
+
+# 3. 重启 webui
+python start_webui.py
+```
+
+**说明**：
+- `webui.db` 已在 `.gitignore`，`git pull` **不会覆盖或删除**它
+- 新版本会自动执行 DB migration（添加新表），**不会删除**已有数据
+- 如果担心出问题，先 `cp webui.db webui.db.backup` 备份
+
+---
 
 WebUI 提供：
 - 📥 批量粘贴 4 段格式 → 一键入库
