@@ -37,10 +37,51 @@ cd gpt-outlook-register
 pip install -r requirements.txt
 python start_webui.py
 # 浏览器自动打开 http://127.0.0.1:8765/
-公网启动：
+```
+
+**公网启动**：
+```bash
 python start_webui.py --host 0.0.0.0 --port 8765
 ```
 
+#### Linux 服务器后台运行（24 小时不停）
+
+**推荐使用 screen 后台运行**，关闭 SSH 后进程不会被杀掉：
+
+```bash
+# 1. 安装 screen（如果没有）
+apt install -y screen   # Debian/Ubuntu
+# yum install -y screen  # CentOS/RHEL
+
+# 2. 创建 screen 会话
+screen -S webui
+
+# 3. 启动 WebUI（公网访问）
+python start_webui.py --host 0.0.0.0 --port 8765
+
+# 4. 看到启动成功后，按 Ctrl+A 再按 D 离开
+#    （进程继续在后台运行）
+
+# 5. 浏览器访问
+#    http://服务器公网IP:8765
+
+# --- 常用命令 ---
+# 重新连接到 screen（查看日志）
+screen -r webui
+
+# 查看所有 screen 会话
+screen -ls
+
+# 停止 WebUI（在 screen 里按 Ctrl+C）
+```
+
+**重要提示**：
+- 需要先安装 Node.js（≥18）才能正常收到 OTP 邮件，否则会卡在验证码等待：
+  ```bash
+  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash -
+  sudo apt-get install -y nodejs
+  node --version  # 验证 >= 18
+  ```
 
 #### 已有项目，安全升级（不丢数据）
 ```bash
