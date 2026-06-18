@@ -173,9 +173,8 @@
     <div class="tab-content hidden" id="tab-mailcfg">
       <h3 style="margin:0 0 12px;color:var(--pink-dark)">📧 邮箱来源配置</h3>
       <p class="hint">
-        OpenAI 注册需要邮箱收 OTP。可选 Outlook 接码池（从号池 claim），
-        或者用主人自己的 CF Worker 自建 catch-all 邮箱
-        (<a href="https://github.com/dreamhunter2333/cloudflare_temp_email" target="_blank" rel="noopener" class="brand-link">cloudflare_temp_email</a>)。
+        OpenAI 注册需要邮箱收 OTP。可选 Outlook 接码池（从号池 claim）、
+        CF Worker 自建 catch-all 邮箱，或 LuckMail 购买邮箱（mails.luckyous.com）。
       </p>
       <div class="form">
         <fieldset>
@@ -187,6 +186,10 @@
           <label class="check">
             <input type="radio" name="mailSource" value="cf_temp" id="msCfTemp">
             CF Temp Email <small>（cloudflare_temp_email 自建 catch-all）</small>
+          </label>
+          <label class="check">
+            <input type="radio" name="mailSource" value="luckmail" id="msLuckMail">
+            LuckMail <small>（mails.luckyous.com 购买邮箱 + token 查询 OTP）</small>
           </label>
         </fieldset>
 
@@ -206,9 +209,41 @@
           </p>
         </div>
 
+        <div id="luckmailCfg" class="hidden">
+          <label>API Key <small>（LuckMail OpenAPI）</small>
+            <input id="luckmailApiKey" placeholder="留空表示不修改（已设置）" type="password">
+          </label>
+          <label>API Secret <small>（LuckMail OpenAPI，用于 HMAC 签名）</small>
+            <input id="luckmailApiSecret" placeholder="留空表示不修改（已设置）" type="password">
+          </label>
+          <div class="row">
+            <label style="flex:1">Project Code
+              <input id="luckmailProjectCode" placeholder="openai">
+            </label>
+            <label style="flex:1">Email Type
+              <select id="luckmailEmailType">
+                <option value="ms_graph" selected>ms_graph</option>
+                <option value="ms_imap">ms_imap</option>
+                <option value="google_variant">google_variant</option>
+                <option value="self_built">self_built</option>
+              </select>
+            </label>
+            <label style="flex:1">Domain
+              <input id="luckmailDomain" placeholder="outlook.com">
+            </label>
+          </div>
+          <div class="row">
+            <button id="btnLuckMailImport" class="primary">🛒 购买并导入邮箱</button>
+            <label style="flex:1;margin-bottom:0">数量
+              <input id="luckmailImportQty" type="number" value="5" min="1" max="50" style="width:80px">
+            </label>
+            <span id="luckmailImportResult" class="result"></span>
+          </div>
+        </div>
+
         <div class="row">
           <button id="btnSaveMailCfg" class="primary">💾 保存配置</button>
-          <button id="btnTestMail">🔌 测试 CF 连通性</button>
+          <button id="btnTestMail">🔌 测试连通性</button>
           <span id="mailCfgResult" class="result"></span>
         </div>
       </div>
@@ -227,6 +262,10 @@
           <label class="check">
             <input type="radio" name="smsProvider" value="smsbower" id="spSmsbower" checked>
             SmsBower <small>（smsbower.page，支持号码复用 + V2 API + auto-resend）</small>
+          </label>
+          <label class="check">
+            <input type="radio" name="smsProvider" value="herosms" id="spHeroSms">
+            HeroSMS <small>（hero-sms.com，SMS-Activate 兼容协议）</small>
           </label>
         </fieldset>
 

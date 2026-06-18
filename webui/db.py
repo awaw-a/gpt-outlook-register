@@ -33,6 +33,7 @@ def init_db():
             password        TEXT,
             client_id       TEXT,
             refresh_token   TEXT,
+            luckmail_token  TEXT,         -- LuckMail 购买邮箱的查询 token
             status          TEXT NOT NULL DEFAULT 'available',
                             -- available / in_use / done / failed
             imported_at     REAL,
@@ -74,11 +75,17 @@ def init_db():
         );
     """)
     con.commit()
-    # 老 DB migrate：error_category 在后期才加，对已建表补列
+    # 老 DB migrate：error_category / luckmail_token 在后期才加，对已建表补列
     cur = con.execute("PRAGMA table_info(runs)")
     cols = {r[1] for r in cur.fetchall()}
     if "error_category" not in cols:
         con.execute("ALTER TABLE runs ADD COLUMN error_category TEXT")
+        con.commit()
+
+    cur = con.execute("PRAGMA table_info(outlook_accounts)")
+    cols = {r[1] for r in cur.fetchall()}
+    if "luckmail_token" not in cols:
+        con.execute("ALTER TABLE outlook_accounts ADD COLUMN luckmail_token TEXT")
         con.commit()
 
 
@@ -539,20 +546,26 @@ def set_setting(key: str, value) -> None:
 
 
 def get_mail_config() -> dict:
-    """返回邮箱来源配置（admin_token 隐藏明文）。"""
+    """返回邮箱来源配置（敏感字段隐藏明文）。"""
     return {
-        "mail_source":   get_setting("mail_source", "outlook"),  # outlook / cf_temp
+        "mail_source":   get_setting("mail_source", "outlook"),  # outlook / cf_temp / luckmail
         "cf_api_url":    get_setting("cf_api_url", ""),
         "cf_admin_token": "***" if get_setting("cf_admin_token") else "",
         "cf_domain":     get_setting("cf_domain", ""),
+        # luckmail
+        "luckmail_api_key":    "***" if get_setting("luckmail_api_key") else "",
+        "luckmail_api_secret": "***" if get_setting("luckmail_api_secret") else "",
+        "luckmail_project_code": get_setting("luckmail_project_code", "openai"),
+        "luckmail_email_type": get_setting("luckmail_email_type", "ms_graph"),
+        "luckmail_domain":     get_setting("luckmail_domain", "outlook.com"),
     }
 
 
 def save_mail_config(data: dict) -> None:
-    """保存邮箱配置。admin_token 传 '***' 表示不修改。"""
+    """保存邮箱配置。密文字段传 '***' 表示不修改。"""
     if "mail_source" in data:
         src = str(data["mail_source"]).strip().lower()
-        if src not in ("outlook", "cf_temp"):
+        if src not in ("outlook", "cf_temp", "luckmail"):
             src = "outlook"
         set_setting("mail_source", src)
     if "cf_api_url" in data:
@@ -561,6 +574,17 @@ def save_mail_config(data: dict) -> None:
         set_setting("cf_domain", str(data["cf_domain"]).strip())
     if data.get("cf_admin_token") and data["cf_admin_token"] != "***":
         set_setting("cf_admin_token", str(data["cf_admin_token"]).strip())
+    # luckmail
+    if data.get("luckmail_api_key") and data["luckmail_api_key"] != "***":
+        set_setting("luckmail_api_key", str(data["luckmail_api_key"]).strip())
+    if data.get("luckmail_api_secret") and data["luckmail_api_secret"] != "***":
+        set_setting("luckmail_api_secret", str(data["luckmail_api_secret"]).strip())
+    if "luckmail_project_code" in data:
+        set_setting("luckmail_project_code", str(data["luckmail_project_code"]).strip())
+    if "luckmail_email_type" in data:
+        set_setting("luckmail_email_type", str(data["luckmail_email_type"]).strip())
+    if "luckmail_domain" in data:
+        set_setting("luckmail_domain", str(data["luckmail_domain"]).strip())
 
 
 def get_cf_admin_token() -> str:
@@ -607,12 +631,12 @@ def get_sms_config() -> dict:
 def save_sms_config(data: dict) -> None:
     """保存 SMS 配置。sms_api_key 传 '***' 表示不修改。"""
     # 校验 provider
-    valid_providers = {"smsbower"}
+    valid_providers = {"smsbower", "herosms", "hero_sms"}
     if "sms_provider" in data:
         p = str(data["sms_provider"]).strip().lower()
         if p not in valid_providers:
             p = "smsbower"
-        set_setting("sms_provider", p)
+        set_setting("sms_provider", "herosms" if p in ("herosms", "hero_sms") else p)
     # 字符串字段直接落
     for key in (
         "sms_country", "sms_service", "sms_max_price",
@@ -655,6 +679,83 @@ def get_sms_internal_config() -> dict:
         "sms_max_phone_attempts":  get_setting("sms_max_phone_attempts", ""),
         "sms_per_phone_timeout":   get_setting("sms_per_phone_timeout", "80"),
     }
+
+
+# ──────────────────────── LuckMail 邮箱配置 ────────────────────────
+
+
+def get_luckmail_config() -> dict:
+    """返回 LuckMail 配置（api_secret 隐藏明文）。"""
+    return {
+        "luckmail_api_key":    "***" if get_setting("luckmail_api_key") else "",
+        "luckmail_api_secret": "***" if get_setting("luckmail_api_secret") else "",
+        "luckmail_project_code": get_setting("luckmail_project_code", "openai"),
+        "luckmail_email_type": get_setting("luckmail_email_type", "ms_graph"),
+        "luckmail_domain":     get_setting("luckmail_domain", "outlook.com"),
+    }
+
+
+def save_luckmail_config(data: dict) -> None:
+    """保存 LuckMail 配置。密文字段传 '***' 表示不修改。"""
+    for key in ("luckmail_project_code", "luckmail_email_type", "luckmail_domain"):
+        if key in data:
+            set_setting(key, str(data[key] or "").strip())
+    if data.get("luckmail_api_key") and data["luckmail_api_key"] != "***":
+        set_setting("luckmail_api_key", str(data["luckmail_api_key"]).strip())
+    if data.get("luckmail_api_secret") and data["luckmail_api_secret"] != "***":
+        set_setting("luckmail_api_secret", str(data["luckmail_api_secret"]).strip())
+
+
+def get_luckmail_internal_config() -> dict:
+    """内部用：拿明文 LuckMail 配置。"""
+    return {
+        "luckmail_api_key":    get_setting("luckmail_api_key", ""),
+        "luckmail_api_secret": get_setting("luckmail_api_secret", ""),
+        "luckmail_project_code": get_setting("luckmail_project_code", "openai"),
+        "luckmail_email_type": get_setting("luckmail_email_type", "ms_graph"),
+        "luckmail_domain":     get_setting("luckmail_domain", "outlook.com"),
+    }
+
+
+def import_luckmail_purchases(purchases: list[dict]) -> dict:
+    """把 LuckMail 购买结果批量写入号池。
+
+    purchases: [{email_address, token, project, price}, ...]
+    返回 {"inserted": int, "updated": int, "skipped": int}
+    """
+    now = time.time()
+    inserted = updated = skipped = 0
+    with _lock:
+        con = _conn()
+        for p in purchases:
+            email = (p.get("email_address") or "").strip().lower()
+            token = (p.get("token") or "").strip()
+            if not email or not token:
+                skipped += 1
+                continue
+            cur = con.execute(
+                "SELECT luckmail_token FROM outlook_accounts WHERE email=?",
+                (email,),
+            )
+            existing = cur.fetchone()
+            if existing is None:
+                con.execute(
+                    "INSERT INTO outlook_accounts(email, luckmail_token, status, imported_at) "
+                    "VALUES (?, ?, 'available', ?)",
+                    (email, token, now),
+                )
+                inserted += 1
+            elif existing["luckmail_token"] != token:
+                con.execute(
+                    "UPDATE outlook_accounts SET luckmail_token=?, status='available', "
+                    "imported_at=?, fail_reason=NULL WHERE email=?",
+                    (token, now, email),
+                )
+                updated += 1
+            else:
+                skipped += 1
+        con.commit()
+    return {"inserted": inserted, "updated": updated, "skipped": skipped}
 
 
 # ──────────────────────── 自动导出配置 (CPA / SUB2API) ────────────────────────

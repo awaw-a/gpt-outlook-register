@@ -220,9 +220,13 @@ def _make_sms_candidate(activation_id: str, source: str, code) -> Optional[dict]
 
 
 class SmsBowerProvider(BaseSmsProvider):
-    """SmsBower (smsbower.page) —— 支持号码复用 + resend + V2 API。"""
+    """SmsBower / SMS-Activate 兼容协议 —— 支持号码复用 + resend + V2 API。
 
-    BASE_URL = "https://smsbower.page/stubs/handler_api.php"
+    通过 base_url 参数可同时支持 smsbower.page 与 hero-sms.com 等
+    SMS-Activate 兼容平台。
+    """
+
+    DEFAULT_BASE_URL = "https://smsbower.page/stubs/handler_api.php"
     auto_report_success_on_code = False  # 等业务侧确认才报成功（便于号码复用）
 
     def __init__(
@@ -235,6 +239,7 @@ class SmsBowerProvider(BaseSmsProvider):
         proxy: Optional[str] = None,
         reuse_phone_to_max: bool = True,
         phone_success_max: int = 3,
+        base_url: str = "",
     ):
         self.api_key = str(api_key or "").strip()
         self.default_service = str(default_service or SMS_DEFAULT_SERVICE).strip()
@@ -244,6 +249,7 @@ class SmsBowerProvider(BaseSmsProvider):
         self._proxies = {"http": self._proxy, "https": self._proxy} if self._proxy else None
         self.reuse_phone_to_max = bool(reuse_phone_to_max)
         self.phone_success_max = max(0, int(phone_success_max or 0))
+        self.base_url = (base_url or self.DEFAULT_BASE_URL).rstrip("/")
         self._resend_callback: Optional[Callable[[], None]] = None
         self.last_code_result: Optional[dict] = None
         self.current_activation: Optional[SmsActivation] = None
@@ -254,7 +260,7 @@ class SmsBowerProvider(BaseSmsProvider):
         payload = dict(params)
         if needs_key:
             payload["api_key"] = self.api_key
-        resp = requests.get(self.BASE_URL, params=payload, timeout=timeout, proxies=self._proxies)
+        resp = requests.get(self.base_url, params=payload, timeout=timeout, proxies=self._proxies)
         resp.raise_for_status()
         return resp
 
@@ -801,6 +807,15 @@ class SmsBowerProvider(BaseSmsProvider):
         self._resend_callback = callback
 
 
+class HeroSmsProvider(SmsBowerProvider):
+    """HeroSMS (hero-sms.com) —— SMS-Activate 兼容协议。
+
+    与 SmsBowerProvider 协议完全一致，仅 base_url 不同。
+    """
+
+    DEFAULT_BASE_URL = "https://hero-sms.com/stubs/handler_api.php"
+
+
 
 # ---------------------------------------------------------------------------
 # 工厂 + 回调控制器（注入到 auth_flow）
@@ -810,7 +825,7 @@ class SmsBowerProvider(BaseSmsProvider):
 def create_sms_provider(provider_key: str, config: dict) -> BaseSmsProvider:
     """从配置创建 provider 实例。
 
-    provider_key: smsbower / smsbower
+    provider_key: smsbower / herosms / hero_sms
     config 字段：sms_api_key / sms_country / sms_service / sms_max_price /
                 sms_reuse_phone / sms_phone_success_max
     """
@@ -835,6 +850,14 @@ def create_sms_provider(provider_key: str, config: dict) -> BaseSmsProvider:
                                 proxy=proxy,
                                 reuse_phone_to_max=reuse,
                                 phone_success_max=succ_max)
+    if pk in ("herosms", "hero_sms"):
+        return HeroSmsProvider(api_key=api_key,
+                               default_service=service,
+                               default_country=country or SMS_DEFAULT_COUNTRY,
+                               max_price=max_price,
+                               proxy=proxy,
+                               reuse_phone_to_max=reuse,
+                               phone_success_max=succ_max)
     raise RuntimeError(f"未知接码服务: {provider_key}")
 
 

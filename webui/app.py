@@ -278,10 +278,16 @@ def api_get_mail_config():
 
 
 class SaveMailConfigReq(BaseModel):
-    mail_source: Optional[str] = None       # outlook / cf_temp
+    mail_source: Optional[str] = None       # outlook / cf_temp / luckmail
     cf_api_url: Optional[str] = None
     cf_admin_token: Optional[str] = None
     cf_domain: Optional[str] = None
+    # luckmail
+    luckmail_api_key: Optional[str] = None
+    luckmail_api_secret: Optional[str] = None
+    luckmail_project_code: Optional[str] = None
+    luckmail_email_type: Optional[str] = None
+    luckmail_domain: Optional[str] = None
 
 
 @app.post("/api/settings/mail")
@@ -292,32 +298,92 @@ def api_save_mail_config(req: SaveMailConfigReq):
 
 @app.post("/api/settings/mail/test")
 def api_test_mail():
-    """测试 CF Temp Email 连通性：创建一个测试地址，确认 admin_token + domain 都对。"""
+    """测试 CF Temp Email / LuckMail 连通性。"""
     mail_source = db.get_setting("mail_source", "outlook")
-    if mail_source != "cf_temp":
-        raise HTTPException(400, f"当前 mail_source={mail_source}，不需要测试")
-
-    api_url = db.get_setting("cf_api_url", "")
-    domain = db.get_setting("cf_domain", "")
-    token = db.get_cf_admin_token()
-    if not api_url:
-        raise HTTPException(400, "未配置 cf_api_url")
-    if not domain:
-        raise HTTPException(400, "未配置 cf_domain")
-    if not token:
-        raise HTTPException(400, "未配置 cf_admin_token")
-
-    import sys as _sys
     ROOT_DIR = Path(__file__).resolve().parents[1]
+    import sys as _sys
     if str(ROOT_DIR) not in _sys.path:
         _sys.path.insert(0, str(ROOT_DIR))
-    from mail_cf import CFTempEmailProvider
+
+    if mail_source == "cf_temp":
+        api_url = db.get_setting("cf_api_url", "")
+        domain = db.get_setting("cf_domain", "")
+        token = db.get_cf_admin_token()
+        if not api_url:
+            raise HTTPException(400, "未配置 cf_api_url")
+        if not domain:
+            raise HTTPException(400, "未配置 cf_domain")
+        if not token:
+            raise HTTPException(400, "未配置 cf_admin_token")
+        from mail_cf import CFTempEmailProvider
+        try:
+            provider = CFTempEmailProvider(api_url=api_url, admin_token=token, domain=domain)
+            test_email = provider.create_mailbox()
+            return {"ok": True, "message": f"连接成功，测试邮箱: {test_email}"}
+        except Exception as e:
+            raise HTTPException(500, f"连接失败: {e}")
+
+    if mail_source == "luckmail":
+        cfg = db.get_luckmail_internal_config()
+        if not cfg.get("luckmail_api_key") or not cfg.get("luckmail_api_secret"):
+            raise HTTPException(400, "未配置 luckmail_api_key / luckmail_api_secret")
+        from mail_luckmail import _request
+        try:
+            data = _request(
+                cfg["luckmail_api_key"],
+                cfg["luckmail_api_secret"],
+                "GET",
+                "/balance",
+            )
+            return {"ok": True, "message": f"连接成功，余额信息: {data}"}
+        except Exception as e:
+            raise HTTPException(500, f"连接失败: {e}")
+
+    raise HTTPException(400, f"当前 mail_source={mail_source}，不需要测试")
+
+
+class ImportLuckMailReq(BaseModel):
+    quantity: int = 1
+
+
+@app.post("/api/luckmail/import")
+def api_luckmail_import(req: ImportLuckMailReq):
+    """从 LuckMail 购买邮箱并导入号池。"""
+    mail_source = db.get_setting("mail_source", "outlook")
+    if mail_source != "luckmail":
+        raise HTTPException(400, f"当前 mail_source={mail_source}，请先切换到 LuckMail")
+
+    cfg = db.get_luckmail_internal_config()
+    if not cfg.get("luckmail_api_key") or not cfg.get("luckmail_api_secret"):
+        raise HTTPException(400, "未配置 luckmail_api_key / luckmail_api_secret")
+
+    ROOT_DIR = Path(__file__).resolve().parents[1]
+    import sys as _sys
+    if str(ROOT_DIR) not in _sys.path:
+        _sys.path.insert(0, str(ROOT_DIR))
+    from mail_luckmail import purchase_emails
+
+    quantity = max(1, min(50, int(req.quantity or 1)))
     try:
-        provider = CFTempEmailProvider(api_url=api_url, admin_token=token, domain=domain)
-        test_email = provider.create_mailbox()
-        return {"ok": True, "message": f"连接成功，测试邮箱: {test_email}"}
+        purchases = purchase_emails(
+            cfg["luckmail_api_key"],
+            cfg["luckmail_api_secret"],
+            project_code=cfg.get("luckmail_project_code") or "openai",
+            email_type=cfg.get("luckmail_email_type") or "ms_graph",
+            domain=cfg.get("luckmail_domain") or "outlook.com",
+            quantity=quantity,
+        )
+        result = db.import_luckmail_purchases(purchases)
+        return {
+            "ok": True,
+            "purchased": len(purchases),
+            "inserted": result["inserted"],
+            "updated": result["updated"],
+            "skipped": result["skipped"],
+            "stats": db.stats(),
+        }
     except Exception as e:
-        raise HTTPException(500, f"连接失败: {e}")
+        raise HTTPException(500, f"购买/导入失败: {e}")
 
 
 # ──────────────────────── SMS 接码配置 ────────────────────────
@@ -330,7 +396,7 @@ def api_get_sms_config():
 
 class SaveSmsConfigReq(BaseModel):
     sms_enabled: Optional[str] = None              # "0" / "1"
-    sms_provider: Optional[str] = None             # smsbower / smsbower
+    sms_provider: Optional[str] = None             # smsbower / herosms
     sms_api_key: Optional[str] = None              # 传 '***' 表示不修改
     sms_country: Optional[str] = None              # ID 或国家代码（'52' / 'th'）
     sms_service: Optional[str] = None              # OpenAI = 'dr'
@@ -379,11 +445,11 @@ def api_test_sms():
 
 @app.get("/api/settings/sms/countries")
 def api_sms_top_countries():
-    """查询 SmsBower / SmsBower 的国家排名（价格 + 库存）。"""
+    """查询 SmsBower / HeroSMS 的国家排名（价格 + 库存）。"""
     cfg = db.get_sms_internal_config()
     if not cfg.get("sms_api_key"):
         raise HTTPException(400, "未配置 sms_api_key")
-    if cfg["sms_provider"] not in ("smsbower", "smsbower"):
+    if cfg["sms_provider"] not in ("smsbower", "herosms", "hero_sms"):
         return {"ok": True, "countries": [], "message": "当前 provider 不支持国家排名查询"}
 
     import sys as _sys

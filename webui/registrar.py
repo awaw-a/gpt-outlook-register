@@ -155,7 +155,7 @@ def _do_register(
         cfg = Config()
         cfg.proxy = (options.get("proxy") or "").strip() or None
 
-        # ─ 邮箱来源路由：outlook 池 vs CF Worker catch-all ─
+        # ─ 邮箱来源路由：outlook 池 / CF Worker catch-all / LuckMail ─
         if mail_source == "cf_temp":
             sys_path_root = str(ROOT)
             if sys_path_root not in sys.path:
@@ -175,6 +175,32 @@ def _do_register(
             )
             logging.getLogger("registrar").info(
                 f"[register] 邮箱来源: cf_temp / domain={domain}"
+            )
+        elif mail_source == "luckmail":
+            sys_path_root = str(ROOT)
+            if sys_path_root not in sys.path:
+                sys.path.insert(0, sys_path_root)
+            from mail_luckmail import LuckMailProvider
+
+            cfg = db.get_luckmail_internal_config()
+            if not cfg.get("luckmail_api_key") or not cfg.get("luckmail_api_secret"):
+                raise RuntimeError(
+                    "LuckMail 未配置完整（缺 api_key / api_secret），"
+                    "请去「邮箱配置」Tab 填写"
+                )
+            token = account.get("luckmail_token") or account.get("refresh_token") or ""
+            if not token:
+                raise RuntimeError(
+                    f"LuckMail 邮箱 {email} 没有 token，请先购买导入"
+                )
+            mail = LuckMailProvider(
+                api_key=cfg["luckmail_api_key"],
+                api_secret=cfg["luckmail_api_secret"],
+                email=account["email"],
+                token=token,
+            )
+            logging.getLogger("registrar").info(
+                f"[register] 邮箱来源: luckmail / email={email}"
             )
         else:
             mail = OutlookMailProvider(

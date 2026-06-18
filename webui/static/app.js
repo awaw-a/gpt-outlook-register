@@ -790,8 +790,9 @@ function _bindAutoSave() {
 
 // ──────────────────────── 📧 邮箱配置 ────────────────────────
 
-function _syncCfFields(source) {
+function _syncMailSourceFields(source) {
   $("#cfTempCfg").classList.toggle("hidden", source !== "cf_temp");
+  $("#luckmailCfg").classList.toggle("hidden", source !== "luckmail");
 }
 
 async function loadMailConfig() {
@@ -800,7 +801,7 @@ async function loadMailConfig() {
     const src = config.mail_source || "outlook";
     const radio = document.querySelector(`input[name="mailSource"][value="${src}"]`);
     if (radio) radio.checked = true;
-    _syncCfFields(src);
+    _syncMailSourceFields(src);
     $("#cfApiUrl").value = config.cf_api_url || "";
     $("#cfDomain").value = config.cf_domain || "";
     $("#cfAdminToken").value = "";
@@ -809,6 +810,15 @@ async function loadMailConfig() {
     } else {
       $("#cfAdminToken").placeholder = "Worker 配置的 ADMIN_PASSWORDS";
     }
+    $("#luckmailApiKey").value = "";
+    $("#luckmailApiKey").placeholder = (config.luckmail_api_key === "***")
+      ? "已设置（留空不修改）" : "LuckMail OpenAPI API Key";
+    $("#luckmailApiSecret").value = "";
+    $("#luckmailApiSecret").placeholder = (config.luckmail_api_secret === "***")
+      ? "已设置（留空不修改）" : "LuckMail OpenAPI API Secret（用于 HMAC 签名）";
+    $("#luckmailProjectCode").value = config.luckmail_project_code || "openai";
+    $("#luckmailEmailType").value = config.luckmail_email_type || "ms_graph";
+    $("#luckmailDomain").value = config.luckmail_domain || "outlook.com";
   } catch (e) {
     console.error("loadMailConfig:", e);
   }
@@ -816,17 +826,23 @@ async function loadMailConfig() {
 
 // radio 切换显隐
 document.querySelectorAll("input[name='mailSource']").forEach(r => {
-  r.addEventListener("change", () => _syncCfFields(r.value));
+  r.addEventListener("change", () => _syncMailSourceFields(r.value));
 });
 
 $("#btnSaveMailCfg").addEventListener("click", async () => {
   const source = document.querySelector("input[name='mailSource']:checked")?.value || "outlook";
   const isCf = source === "cf_temp";
+  const isLuck = source === "luckmail";
   const body = {
     mail_source:    source,
     cf_api_url:     isCf ? $("#cfApiUrl").value.trim() : "",
     cf_admin_token: isCf ? ($("#cfAdminToken").value.trim() || "***") : "***",
     cf_domain:      isCf ? $("#cfDomain").value.trim() : "",
+    luckmail_api_key:    isLuck ? ($("#luckmailApiKey").value.trim() || "***") : "***",
+    luckmail_api_secret: isLuck ? ($("#luckmailApiSecret").value.trim() || "***") : "***",
+    luckmail_project_code: isLuck ? $("#luckmailProjectCode").value.trim() : "",
+    luckmail_email_type:   isLuck ? $("#luckmailEmailType").value.trim() : "",
+    luckmail_domain:       isLuck ? $("#luckmailDomain").value.trim() : "",
   };
   try {
     await api("/api/settings/mail", { method: "POST", body: JSON.stringify(body) });
@@ -837,6 +853,31 @@ $("#btnSaveMailCfg").addEventListener("click", async () => {
     $("#mailCfgResult").className = "result bad";
   }
   setTimeout(() => { $("#mailCfgResult").textContent = ""; }, 3000);
+});
+
+$("#btnLuckMailImport").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  const resultEl = $("#luckmailImportResult");
+  resultEl.textContent = "⏳ 购买中...";
+  resultEl.className = "result";
+  try {
+    const qty = Math.max(1, Math.min(50, parseInt($("#luckmailImportQty").value || "5", 10)));
+    const r = await api("/api/luckmail/import", {
+      method: "POST",
+      body: JSON.stringify({ quantity: qty }),
+    });
+    resultEl.textContent = `✅ 购买 ${r.purchased} 个，导入 +${r.inserted} / 更新 ${r.updated} / 跳过 ${r.skipped}`;
+    resultEl.className = "result ok";
+    refreshStats();
+    refreshPool();
+  } catch (err) {
+    resultEl.textContent = "❌ " + err.message;
+    resultEl.className = "result bad";
+  } finally {
+    btn.disabled = false;
+  }
+  setTimeout(() => { resultEl.textContent = ""; resultEl.className = "result"; }, 5000);
 });
 
 $("#btnTestMail").addEventListener("click", async (e) => {
@@ -853,7 +894,7 @@ $("#btnTestMail").addEventListener("click", async (e) => {
     $("#mailCfgResult").className = "result bad";
   } finally {
     btn.disabled = false;
-    btn.textContent = "🔌 测试 CF 连通性";
+    btn.textContent = "🔌 测试连通性";
   }
 });
 
